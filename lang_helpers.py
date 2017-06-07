@@ -7,38 +7,41 @@ def tokenize_string(sample):
 
 def load_dataset(seq_len, max_train_data, tokenize=False, max_vocab_size=2048, data_path='data/1-billion-words'):
     dataset_name = os.path.basename(data_path)
+
+    lines = []
+    finished = False
+
     if dataset_name in ['1-billion-words']:
         train_data_path = os.path.join(data_path, 'training-monolingual.tokenized.shuffled')
 
-    print("loading dataset...")
+        print("loading dataset: {}...".format(dataset_name))
 
-    lines = []
+        for i in range(99):
 
-    finished = False
+            filename = os.path.join(train_data_path, "news.en-{}-of-00100".format(str(i+1).zfill(5)))
+            if i % 10 == 9:
+                print('finished reading {} files...'.format(i+1))
+            with open(filename, 'r') as f:
+                for line in f:
+                    line = line[:-1]
+                    if tokenize:
+                        line = tokenize_string(line)
+                    else:
+                        line = tuple(line)
 
-    for i in range(99):
+                    if len(line) > seq_len:
+                        line = line[:seq_len]
 
-        filename = os.path.join(train_data_path, "news.en-{}-of-00100".format(str(i+1).zfill(5)))
-        if i % 10 == 9:
-            print('finished reading {} files...'.format(i+1))
-        with open(filename, 'r') as f:
-            for line in f:
-                line = line[:-1]
-                if tokenize:
-                    line = tokenize_string(line)
-                else:
-                    line = tuple(line)
+                    lines.append(line + ( ("`",)*(seq_len-len(line)) ) )
 
-                if len(line) > seq_len:
-                    line = line[:seq_len]
+                    if len(lines) == max_train_data:
+                        finished = True
+                        break
+            if finished:
+                break
 
-                lines.append(line + ( ("`",)*(seq_len-len(line)) ) )
-
-                if len(lines) == max_train_data:
-                    finished = True
-                    break
-        if finished:
-            break
+    else:
+        raise Exception("[!] Caution! Paper didn't use other dataset")
 
     print('creating charmap...')
     np.random.shuffle(lines)

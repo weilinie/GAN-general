@@ -7,10 +7,10 @@ from config import get_config
 from model import *
 from utils import *
 
-__author__= 'Weili Nie'
+__author__ = 'Weili Nie'
 
 
-class WGAN_GP_Char(object):
+class GAN_GP_Img(object):
     def __init__(self, config):
         self.dataset = config.dataset
         self.data_path = config.data_path
@@ -52,19 +52,19 @@ class WGAN_GP_Char(object):
             data_path=self.data_path
         )
         vocab_size = len(self.charmap)
-        
+
         z = tf.random_normal(shape=[self.batch_size, self.z_dim])
-        
+
         self.real_data = tf.placeholder(tf.int32, shape=[self.batch_size, self.seq_len])
         real_data_one_hot = tf.one_hot(self.real_data, vocab_size)
         fake_data_softmax, g_vars = generator(z, self.conv_hidden_num, self.seq_len,
-                                                   self.kernel_size, vocab_size)
+                                              self.kernel_size, vocab_size)
         self.fake_data = tf.argmax(fake_data_softmax, fake_data_softmax.get_shape().ndims - 1)
 
         d_out_real, d_vars = discriminator(real_data_one_hot, self.conv_hidden_num,
-                                               self.seq_len, self.kernel_size, vocab_size, reuse=False)
+                                           self.seq_len, self.kernel_size, vocab_size, reuse=False)
         d_out_fake, _ = discriminator(fake_data_softmax, self.conv_hidden_num,
-                                               self.seq_len, self.kernel_size, vocab_size)
+                                      self.seq_len, self.kernel_size, vocab_size)
 
         self.d_loss = tf.reduce_mean(d_out_fake) - tf.reduce_mean(d_out_real)
         self.g_loss = -tf.reduce_mean(d_out_fake)
@@ -116,12 +116,12 @@ class WGAN_GP_Char(object):
                 g_loss, d_loss, slope = self.sess.run([self.g_loss, self.d_loss, self.slope],
                                                       feed_dict={self.real_data: _data})
                 print("[{}/{}] Loss_D: {:.6f} Loss_G: {:.6f} Slope: {:.6f}".
-                      format(step+1, self.max_step, d_loss, g_loss, slope))
+                      format(step + 1, self.max_step, d_loss, g_loss, slope))
 
                 samples = []
                 for i in range(10):
                     samples.extend(self.generate_samples())  # run 10 times
-                    
+
                 with open('{}/samples_{}.txt'.format(self.model_dir, step), 'w') as f:
                     for s in samples:
                         s = "".join(s)
@@ -144,5 +144,5 @@ if __name__ == '__main__':
 
     prepare_dirs(config)
 
-    wgan_gp_char = WGAN_GP_Char(config)
-    wgan_gp_char.train()
+    gan_gp_img = GAN_GP_Img(config)
+    gan_gp_img.train()
