@@ -109,7 +109,7 @@ def download_1_billion_words(base_path):
         response = requests.get(url, stream=True)
         total_size = int(response.headers.get('content-length', 0))
         with open(save_path, "wb") as f:
-            for chunk in tqdm(response.iter_content(chunk_size=24*1024), total=total_size):
+            for chunk in tqdm(response.iter_content(), total=total_size):
                 if chunk:  # filter out keep-alive new chunks
                     f.write(chunk)
 

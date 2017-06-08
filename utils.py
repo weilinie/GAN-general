@@ -5,22 +5,22 @@ from datetime import datetime
 import numpy as np
 
 
-def prepare_dirs(config):
+def prepare_dirs(config, dataset):
 
-    config.model_name = "{}_{}".format(config.dataset, datetime.now().strftime("%m%d_%H%M%S"))
+    config.model_name = "{}_{}".format(dataset, datetime.now().strftime("%m%d_%H%M%S"))
 
     if not hasattr(config, 'model_dir'):
         config.model_dir = os.path.join(config.log_dir, config.model_name)
 
     if not hasattr(config, 'data_path'):
-        config.data_path = os.path.join(config.data_dir, config.dataset)
+        config.data_path = os.path.join(config.data_dir, dataset)
 
     for dir in [config.log_dir, config.data_dir, config.model_dir]:
         if not os.path.exists(dir):
             os.makedirs(dir)
 
 
-# Dataset iterator
+# language dataset iterator
 def inf_train_gen(lines, batch_size, charmap):
     while True:
         np.random.shuffle(lines)
@@ -29,3 +29,5 @@ def inf_train_gen(lines, batch_size, charmap):
                 [[charmap[c] for c in l] for l in lines[i:i+batch_size]],
                 dtype=np.int32
             )
+
+

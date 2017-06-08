@@ -12,7 +12,9 @@ __author__ = 'Weili Nie'
 
 class GAN_GP_Img(object):
     def __init__(self, config):
-        self.dataset = config.dataset
+        self.d_net = config.d_net
+        self.g_net = config.g_net
+        self.dataset = config.dataset_img
         self.data_path = config.data_path
         self.max_train_data = config.max_train_data
 
@@ -38,12 +40,20 @@ class GAN_GP_Img(object):
 
         self.build_model()
 
-        init_op = tf.global_variables_initializer()
-        self.sv = tf.train.Supervisor(logdir=self.model_dir, init_op=init_op)
+        self.saver = tf.train.Saver()
+        self.summary_writer = tf.summary.FileWriter(self.model_dir)
+
+        sv = tf.train.Supervisor(logdir=self.model_dir,
+                                 is_chief=True,
+                                 saver=self.saver,
+                                 summary_op=None,
+                                 summary_writer=self.summary_writer,
+                                 save_model_secs=300,
+                                 ready_for_local_init_op=None)
 
         gpu_options = tf.GPUOptions(allow_growth=True)
-        sess_config = tf.ConfigProto(gpu_options=gpu_options)
-        self.sess = self.sv.prepare_or_wait_for_session(config=sess_config)
+        sess_config = tf.ConfigProto(allow_soft_placement=True, gpu_options=gpu_options)
+        self.sess = sv.prepare_or_wait_for_session(config=sess_config)
 
     def build_model(self):
         self.lines, self.charmap, self.inv_charmap = load_dataset(
@@ -53,17 +63,17 @@ class GAN_GP_Img(object):
         )
         vocab_size = len(self.charmap)
 
-        z = tf.random_normal(shape=[self.batch_size, self.z_dim])
+        self.z = tf.random_normal(shape=[self.batch_size, self.z_dim])
 
         self.real_data = tf.placeholder(tf.int32, shape=[self.batch_size, self.seq_len])
         real_data_one_hot = tf.one_hot(self.real_data, vocab_size)
-        fake_data_softmax, g_vars = generator(z, self.conv_hidden_num, self.seq_len,
+        fake_data_softmax, g_vars = generator(self.g_net, self.z, self.conv_hidden_num, self.seq_len,
                                               self.kernel_size, vocab_size)
         self.fake_data = tf.argmax(fake_data_softmax, fake_data_softmax.get_shape().ndims - 1)
 
-        d_out_real, d_vars = discriminator(real_data_one_hot, self.conv_hidden_num,
+        d_out_real, d_vars = discriminator(self.d_net, real_data_one_hot, self.conv_hidden_num,
                                            self.seq_len, self.kernel_size, vocab_size, reuse=False)
-        d_out_fake, _ = discriminator(fake_data_softmax, self.conv_hidden_num,
+        d_out_fake, _ = discriminator(self.d_net, fake_data_softmax, self.conv_hidden_num,
                                       self.seq_len, self.kernel_size, vocab_size)
 
         self.d_loss = tf.reduce_mean(d_out_fake) - tf.reduce_mean(d_out_real)
@@ -74,7 +84,7 @@ class GAN_GP_Img(object):
 
         data_diff = fake_data_softmax - real_data_one_hot
         interp_data = real_data_one_hot + epsilon * data_diff
-        disc_interp, _ = discriminator(interp_data, self.conv_hidden_num,
+        disc_interp, _ = discriminator(self.d_net, interp_data, self.conv_hidden_num,
                                        self.seq_len, self.kernel_size, vocab_size)
         grad_interp = tf.gradients(disc_interp, [interp_data])[0]
         print('The shape of grad_interp: {}'.format(grad_interp.get_shape().as_list()))
@@ -98,13 +108,15 @@ class GAN_GP_Img(object):
         ])
 
     def train(self):
+        z_fixed = np.random.normal(size=[self.batch_size * 10, self.z_dim])  # samples of 10 times batch size
         gen = inf_train_gen(self.lines, self.batch_size, self.charmap)
 
         for step in trange(self.max_step):
             # Train generator
             _data = gen.next()
             summary_str, _ = self.sess.run([self.summary_op, self.g_optim], feed_dict={self.real_data: _data})
-            self.sv.summary_computed(self.sess, summary_str, global_step=step)
+            self.summary_writer.add_summary(summary_str, global_step=step)
+            self.summary_writer.flush()
 
             # Train critic
             for i in range(self.critic_iters):
@@ -117,32 +129,31 @@ class GAN_GP_Img(object):
                                                       feed_dict={self.real_data: _data})
                 print("[{}/{}] Loss_D: {:.6f} Loss_G: {:.6f} Slope: {:.6f}".
                       format(step + 1, self.max_step, d_loss, g_loss, slope))
+                self.generate_samples(z_fixed, idx=step)
 
-                samples = []
-                for i in range(10):
-                    samples.extend(self.generate_samples())  # run 10 times
+    def generate_samples(self, z_fixed, idx):
+        samples = []
+        for num in range(10):
+            z_fixed_bs = z_fixed[self.batch_size * num: self.batch_size * (num + 1)]
+            samples = self.sess.run(self.fake_data, feed_dict={self.z: z_fixed_bs})
+            decoded_samples = []
+            for i in range(len(samples)):
+                decoded = []
+                for j in range(len(samples[i])):
+                    decoded.append(self.inv_charmap[samples[i][j]])
+                decoded_samples.append(tuple(decoded))
+            samples.extend(decoded_samples)
 
-                with open('{}/samples_{}.txt'.format(self.model_dir, step), 'w') as f:
-                    for s in samples:
-                        s = "".join(s)
-                        f.write(s + "\n")
-
-    def generate_samples(self):
-        samples = self.sess.run(self.fake_data)
-        decoded_samples = []
-        for i in range(len(samples)):
-            decoded = []
-            for j in range(len(samples[i])):
-                decoded.append(self.inv_charmap[samples[i][j]])
-            decoded_samples.append(tuple(decoded))
-        return decoded_samples
+        with open(os.path.join(self.model_dir, 'samples_{}.txt'.format(idx)), 'w') as f:
+            for s in samples:
+                s = "".join(s)
+                f.write(s + "\n")
 
 
 if __name__ == '__main__':
     config, unparsed = get_config()
     os.environ['CUDA_VISIBLE_DEVICES'] = config.gpus
-
-    prepare_dirs(config)
+    prepare_dirs(config, config.dataset_img)
 
     gan_gp_img = GAN_GP_Img(config)
     gan_gp_img.train()
