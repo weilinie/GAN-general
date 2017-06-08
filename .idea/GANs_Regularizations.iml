@@ -6,6 +6,7 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="BEGAN-tensorflow" />
     <orderEntry type="module" module-name="improved_wgan_training" />
+    <orderEntry type="module" module-name="DCGAN" />
   </component>
   <component name="TestRunnerService">
     <option name="PROJECT_TEST_RUNNER" value="Unittests" />

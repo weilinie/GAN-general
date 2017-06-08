@@ -4,7 +4,7 @@ from tqdm import trange
 
 from lang_helpers import load_dataset
 from config import get_config
-from model import *
+from model_img import *
 from utils import *
 
 __author__ = 'Weili Nie'
@@ -16,24 +16,23 @@ class GAN_GP_Img(object):
         self.g_net = config.g_net
         self.dataset = config.dataset_img
         self.data_path = config.data_path
-        self.max_train_data = config.max_train_data
 
         self.beta1 = config.beta1
         self.beta2 = config.beta2
         self.optimizer = config.optimizer
         self.batch_size = config.batch_size
         self.kernel_size = config.kernel_size
+        self.loss_type = config.loss_type
+
         self.z_dim = config.z_dim
         self.conv_hidden_num = config.conv_hidden_num
+        self.img_len = config.img_len
         self.g_lr = config.g_lr
         self.d_lr = config.d_lr
-        self.seq_len = config.seq_len
 
         self.model_dir = config.model_dir
-        self.start_step = 0
         self.log_step = config.log_step
         self.max_step = config.max_step
-        self.save_step = config.save_step
 
         self.lmd = config.lmd
         self.critic_iters = config.critic_iters
@@ -57,7 +56,7 @@ class GAN_GP_Img(object):
 
     def build_model(self):
         self.lines, self.charmap, self.inv_charmap = load_dataset(
-            seq_len=self.seq_len,
+            img_len=self.img_len,
             max_train_data=self.max_train_data,
             data_path=self.data_path
         )
@@ -65,16 +64,16 @@ class GAN_GP_Img(object):
 
         self.z = tf.random_normal(shape=[self.batch_size, self.z_dim])
 
-        self.real_data = tf.placeholder(tf.int32, shape=[self.batch_size, self.seq_len])
+        self.real_data = tf.placeholder(tf.int32, shape=[self.batch_size, self.img_len])
         real_data_one_hot = tf.one_hot(self.real_data, vocab_size)
-        fake_data_softmax, g_vars = generator(self.g_net, self.z, self.conv_hidden_num, self.seq_len,
-                                              self.kernel_size, vocab_size)
+        fake_data_softmax, g_vars = generator(self.g_net, self.z, self.conv_hidden_num, self.img_len,
+                                              vocab_size)
         self.fake_data = tf.argmax(fake_data_softmax, fake_data_softmax.get_shape().ndims - 1)
 
         d_out_real, d_vars = discriminator(self.d_net, real_data_one_hot, self.conv_hidden_num,
-                                           self.seq_len, self.kernel_size, vocab_size, reuse=False)
+                                           self.img_len, reuse=False)
         d_out_fake, _ = discriminator(self.d_net, fake_data_softmax, self.conv_hidden_num,
-                                      self.seq_len, self.kernel_size, vocab_size)
+                                      self.img_len, self.kernel_size)
 
         self.d_loss = tf.reduce_mean(d_out_fake) - tf.reduce_mean(d_out_real)
         self.g_loss = -tf.reduce_mean(d_out_fake)
@@ -85,7 +84,7 @@ class GAN_GP_Img(object):
         data_diff = fake_data_softmax - real_data_one_hot
         interp_data = real_data_one_hot + epsilon * data_diff
         disc_interp, _ = discriminator(self.d_net, interp_data, self.conv_hidden_num,
-                                       self.seq_len, self.kernel_size, vocab_size)
+                                       self.img_len, vocab_size)
         grad_interp = tf.gradients(disc_interp, [interp_data])[0]
         print('The shape of grad_interp: {}'.format(grad_interp.get_shape().as_list()))
 
@@ -123,7 +122,7 @@ class GAN_GP_Img(object):
                 _data = gen.next()
                 self.sess.run(self.d_optim, feed_dict={self.real_data: _data})
 
-            if step % 100 == 99:
+            if step % self.log_step == self.log_step-1:
                 _data = gen.next()
                 g_loss, d_loss, slope = self.sess.run([self.g_loss, self.d_loss, self.slope],
                                                       feed_dict={self.real_data: _data})

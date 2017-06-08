@@ -4,7 +4,7 @@ from tqdm import trange
 
 from lang_helpers import load_dataset
 from config import get_config
-from model import *
+from model_lang import *
 from utils import *
 
 __author__= 'Weili Nie'
@@ -129,10 +129,10 @@ class WGAN_GP_Char(object):
                                                       feed_dict={self.real_data: _data})
                 print("[{}/{}] Loss_D: {:.6f} Loss_G: {:.6f} Slope: {:.6f}".
                       format(step+1, self.max_step, d_loss, g_loss, slope))
-                self.generate_samples(z_fixed, idx=step)
+                self.generate_samples(z_fixed, idx=step+1)
 
     def generate_samples(self, z_fixed, idx):
-        samples = []
+        gen_samples = []
         for num in range(10):
             z_fixed_bs = z_fixed[self.batch_size*num: self.batch_size*(num+1)]
             samples = self.sess.run(self.fake_data, feed_dict={self.z: z_fixed_bs})
@@ -142,10 +142,10 @@ class WGAN_GP_Char(object):
                 for j in range(len(samples[i])):
                     decoded.append(self.inv_charmap[samples[i][j]])
                 decoded_samples.append(tuple(decoded))
-            samples.extend(decoded_samples)
+            gen_samples.extend(decoded_samples)
 
         with open(os.path.join(self.model_dir, 'samples_{}.txt'.format(idx)), 'w') as f:
-            for s in samples:
+            for s in gen_samples:
                 s = "".join(s)
                 f.write(s + "\n")
 

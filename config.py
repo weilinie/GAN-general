@@ -15,7 +15,6 @@ net_parser.add_argument('--g_net', type=str, default='ResNet', choices=['ResNet'
 net_parser.add_argument('--d_net', type=str, default='ResNet', choices=['ResNet', 'DCGAN', 'MLP'])
 net_parser.add_argument('--conv_hidden_num', type=int, default=512, choices=[64, 128, 256, 512])
 net_parser.add_argument('--batch_size', type=int, default=64)
-net_parser.add_argument('--kernel_size', type=int, default=5)
 net_parser.add_argument('--z_dim', type=int, default=128, choices=[64, 128])
 
 # Data
@@ -23,12 +22,13 @@ data_parser = add_argument_group('Data')
 data_parser.add_argument('--dataset_lang', type=str, default='1-billion-words')
 data_parser.add_argument('--dataset_img', type=str, default='CelebA')
 data_parser.add_argument('--seq_len', type=int, default=32, help='sequence length in characters')
+data_parser.add_argument('--img_dim', type=int, default=64, help='image shape: [img_dim, img_dim, chs]')
 data_parser.add_argument('--max_train_data', type=int, default=10000000, help='for language model only')
 data_parser.add_argument('--data_dir', type=str, default='data')
 
 # Training
 train_parser = add_argument_group('Training')
-train_parser.add_argument('--loss', type=str, default='WGAN-GP',
+train_parser.add_argument('--loss_type', type=str, default='WGAN-GP',
                           choices=['WGAN-GP', 'JS', 'RKL', 'KL', 'JS-GP', 'RKL-GP', 'KL-GP'])
 train_parser.add_argument('--optimizer', type=str, default='adam')
 train_parser.add_argument('--max_step', type=int, default=100000, help='maximum iterations')
@@ -43,7 +43,7 @@ train_parser.add_argument('--critic_iters', type=int, default=10, help='for WGAN
 # Summary and logs
 summary_parser = add_argument_group('summary')
 summary_parser.add_argument('--log_step', type=int, default=50)
-summary_parser.add_argument('--save_step', type=int, default=5000)
+summary_parser.add_argument('--save_step', type=int, default=50)
 summary_parser.add_argument('--log_dir', type=str, default='logs')
 
 
