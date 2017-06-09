@@ -42,6 +42,7 @@ train_parser.add_argument('--critic_iters', type=int, default=10, help='for WGAN
 
 # Summary and logs
 summary_parser = add_argument_group('summary')
+summary_parser.add_argument('--load_path', type=str, default='')
 summary_parser.add_argument('--log_step', type=int, default=50)
 summary_parser.add_argument('--save_step', type=int, default=50)
 summary_parser.add_argument('--log_dir', type=str, default='logs')

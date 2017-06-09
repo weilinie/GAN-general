@@ -10,7 +10,6 @@ from model_img import *
 from utils import *
 
 
-
 class GAN_GP_Img(object):
     def __init__(self, config):
         self.d_net = config.d_net
@@ -73,12 +72,14 @@ class GAN_GP_Img(object):
         self.slope_real = tf.reduce_mean(tf.norm(tf.gradients(d_out_real, [self.x])[0], axis=1))
 
         if self.optimizer == 'adam':
-            optim = tf.train.AdamOptimizer
+            optim_op = tf.train.AdamOptimizer
+        elif self.optimizer == 'rmsprop':
+            optim_op = tf.train.RMSPropOptimizer
         else:
-            raise Exception("[!] Caution! Paper didn't use {} optim other than Adam".format(self.optimizer))
+            raise Exception("[!] Caution! Other optimizers do not apply right now!")
 
-        self.d_optim = optim(self.d_lr, self.beta1, self.beta2).minimize(self.d_loss, var_list=d_vars)
-        self.g_optim = optim(self.g_lr, self.beta1, self.beta2).minimize(self.g_loss, var_list=g_vars)
+        self.d_optim = optim_op(self.d_lr, self.beta1, self.beta2).minimize(self.d_loss, var_list=d_vars)
+        self.g_optim = optim_op(self.g_lr, self.beta1, self.beta2).minimize(self.g_loss, var_list=g_vars)
 
         self.summary_op = tf.summary.merge([
             tf.summary.scalar("loss/d_loss", self.d_loss),

@@ -11,7 +11,16 @@ from PIL import Image
 
 def prepare_dirs(config, dataset):
 
-    config.model_name = "{}_{}".format(dataset, datetime.now().strftime("%m%d_%H%M%S"))
+    if config.load_path:
+        if config.load_path.startswith(config.log_dir):
+            config.model_dir = config.load_path
+        else:
+            if config.load_path.startswith(config.dataset):
+                config.model_name = config.load_path
+            else:
+                config.model_name = "{}_{}".format(config.dataset, config.load_path)
+    else:
+        config.model_name = "{}_{}".format(dataset, datetime.now().strftime("%m%d_%H%M%S"))
 
     if not hasattr(config, 'model_dir'):
         config.model_dir = os.path.join(config.log_dir, config.model_name)
