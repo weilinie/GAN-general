@@ -108,7 +108,8 @@ class GAN_GP_Img(object):
     def generate_samples(self, z_fixed, sample_dir, idx):
         x = self.sess.run(self.fake_data, {self.z: z_fixed})
         path = os.path.join(sample_dir, 'sample_G_{}.png'.format(idx))
-
+        save_image(x, path)
+        print("[*] Samples saved: {}".format(path))
 
     def cal_grad_penalty(self, real_data, fake_data):
         # WGAN lipschitz-penalty

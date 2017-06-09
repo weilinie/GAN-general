@@ -6,6 +6,7 @@ from datetime import datetime
 import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.layers as tcl
+from PIL import Image
 
 
 def prepare_dirs(config, dataset):
@@ -77,6 +78,7 @@ def subpixelConv2D(*args, **kwargs):
     output = tf.depth_to_space(output, 2)
     return output
 
+
 def f_congugate(t, option="KL", alpha=0):
     if option == "KL":
         return tf.exp(t-1)
@@ -94,6 +96,7 @@ def f_congugate(t, option="KL", alpha=0):
         return 1 / alpha * ((1 - alpha) * t + 1) ** (alpha / (alpha - 1)) - 1 / alpha
     else:
         raise Exception("Not implemented divergence option")
+
 
 def g_f(v, option="KL", alpha=0.5):
     if option == "KL":
@@ -115,3 +118,30 @@ def g_f(v, option="KL", alpha=0.5):
             return v
     else:
         raise Exception("Not implemented divergence option")
+
+
+
+def make_grid(tensor, nrow=8, padding=2):
+    """Code based on https://github.com/pytorch/vision/blob/master/torchvision/utils.py"""
+    batch_size = tensor.shape[0]
+    xmaps = min(nrow, batch_size)
+    ymaps = batch_size // xmaps
+    height, width = int(tensor.shape[1] + padding), int(tensor.shape[2] + padding)
+    grid = np.zeros([height * ymaps + 1 + padding // 2, width * xmaps + 1 + padding // 2, 3], dtype=np.uint8)
+    k = 0
+    for y in range(ymaps):
+        for x in range(xmaps):
+            if k >= batch_size:
+                break
+            h, h_width = y * height + 1 + padding // 2, height - padding
+            w, w_width = x * width + 1 + padding // 2, width - padding
+
+            grid[h:h+h_width, w:w+w_width] = tensor[k]
+            k += 1
+    return grid
+
+def save_image(tensor, filename, nrow=8, padding=2):
+    # Bathsize is 8*2
+    ndarr = make_grid(tensor, nrow=nrow, padding=padding)
+    im = Image.fromarray(ndarr)
+    im.save(filename)
