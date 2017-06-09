@@ -25,11 +25,11 @@ data_parser.add_argument('--seq_len', type=int, default=32, help='sequence lengt
 data_parser.add_argument('--img_dim', type=int, default=64, help='image shape: [img_dim, img_dim, chs]')
 data_parser.add_argument('--max_train_data', type=int, default=10000000, help='for language model only')
 data_parser.add_argument('--data_dir', type=str, default='data')
+data_parser.add_argument('--split', type=str, default='train', help='for CelebA only')
 
 # Training
 train_parser = add_argument_group('Training')
-train_parser.add_argument('--loss_type', type=str, default='WGAN-GP',
-                          choices=['WGAN-GP', 'JS', 'RKL', 'KL', 'JS-GP', 'RKL-GP', 'KL-GP'])
+train_parser.add_argument('--loss_type', type=str, default='WGAN-GP')
 train_parser.add_argument('--optimizer', type=str, default='adam')
 train_parser.add_argument('--max_step', type=int, default=100000, help='maximum iterations')
 train_parser.add_argument('--d_lr', type=float, default=1e-4)

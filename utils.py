@@ -22,7 +22,6 @@ def prepare_dirs(config, dataset):
         if not os.path.exists(dir):
             os.makedirs(dir)
 
-
 # language dataset iterator
 def inf_train_gen(lines, batch_size, charmap):
     while True:
@@ -33,7 +32,7 @@ def inf_train_gen(lines, batch_size, charmap):
                 dtype=np.int32
             )
 
-
+# image residual block
 def resBlock(inputs, input_num, output_num, kernel_size, resample=None):
     """
     resample: None, 'down', or 'up'
@@ -71,10 +70,48 @@ def resBlock(inputs, input_num, output_num, kernel_size, resample=None):
     return shortcut + (0.3*output)
 
 
-# use depth-to-space for upsampling
+# use depth-to-space for upsampling image
 def subpixelConv2D(*args, **kwargs):
     kwargs['num_outputs'] = 4*kwargs['num_outputs']
     output = tcl.conv2d(*args, **kwargs)
     output = tf.depth_to_space(output, 2)
     return output
 
+def f_congugate(t, option="KL", alpha=0):
+    if option == "KL":
+        return tf.exp(t-1)
+    elif option == "RKL":
+        return -1 - tf.log(-t)
+    elif option == "JS":
+        return -tf.log(2 - tf.exp(t))
+    elif option == "Hellinger":
+        return t / (1 - t)
+    elif option == "TV":
+        return t
+    elif option == "Pearson":
+        return t ** 2 / 4 + t
+    elif option == "alpha" and alpha != 0:
+        return 1 / alpha * ((1 - alpha) * t + 1) ** (alpha / (alpha - 1)) - 1 / alpha
+    else:
+        raise Exception("Not implemented divergence option")
+
+def g_f(v, option="KL", alpha=0.5):
+    if option == "KL":
+        return v
+    elif option == "RKL":
+        return -tf.exp(v)
+    elif option == "JS":
+        return tf.log(2) - tf.log(1 + tf.exp(-v))
+    elif option == "Hellinger":
+        return 1 - tf.exp(-v)
+    elif option == "TV":
+        return tf.tanh(v) / 2
+    elif option == "Pearson":
+        return v
+    elif option == "alpha" and alpha != 0:
+        if alpha < 1:
+            return 1 / (1 - alpha) - tf.log(1 + tf.exp(-v))
+        else:
+            return v
+    else:
+        raise Exception("Not implemented divergence option")

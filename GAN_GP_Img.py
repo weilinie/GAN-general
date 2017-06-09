@@ -1,13 +1,14 @@
+__author__ = 'Weili Nie'
+
 import os
 import tensorflow as tf
 from tqdm import trange
 
-from lang_helpers import load_dataset
+from img_helpers import load_dataset
 from config import get_config
 from model_img import *
 from utils import *
 
-__author__ = 'Weili Nie'
 
 
 class GAN_GP_Img(object):
@@ -16,17 +17,17 @@ class GAN_GP_Img(object):
         self.g_net = config.g_net
         self.dataset = config.dataset_img
         self.data_path = config.data_path
+        self.split = config.split
 
         self.beta1 = config.beta1
         self.beta2 = config.beta2
         self.optimizer = config.optimizer
         self.batch_size = config.batch_size
-        self.kernel_size = config.kernel_size
         self.loss_type = config.loss_type
 
         self.z_dim = config.z_dim
         self.conv_hidden_num = config.conv_hidden_num
-        self.img_len = config.img_len
+        self.img_dim = config.img_dim
         self.g_lr = config.g_lr
         self.d_lr = config.d_lr
 
@@ -55,42 +56,21 @@ class GAN_GP_Img(object):
         self.sess = sv.prepare_or_wait_for_session(config=sess_config)
 
     def build_model(self):
-        self.lines, self.charmap, self.inv_charmap = load_dataset(
-            img_len=self.img_len,
-            max_train_data=self.max_train_data,
-            data_path=self.data_path
+        self.x = load_dataset(
+            data_path=self.data_path,
+            batch_size=self.batch_size,
+            scale_size=self.img_dim
         )
-        vocab_size = len(self.charmap)
-
+        img_chs = self.x.get_shape().as_list()[-1]
         self.z = tf.random_normal(shape=[self.batch_size, self.z_dim])
 
-        self.real_data = tf.placeholder(tf.int32, shape=[self.batch_size, self.img_len])
-        real_data_one_hot = tf.one_hot(self.real_data, vocab_size)
-        fake_data_softmax, g_vars = generator(self.g_net, self.z, self.conv_hidden_num, self.img_len,
-                                              vocab_size)
-        self.fake_data = tf.argmax(fake_data_softmax, fake_data_softmax.get_shape().ndims - 1)
+        self.fake_data, g_vars = generator(self.g_net, self.z, self.conv_hidden_num, self.img_dim, img_chs)
 
-        d_out_real, d_vars = discriminator(self.d_net, real_data_one_hot, self.conv_hidden_num,
-                                           self.img_len, reuse=False)
-        d_out_fake, _ = discriminator(self.d_net, fake_data_softmax, self.conv_hidden_num,
-                                      self.img_len, self.kernel_size)
+        d_out_real, d_vars = discriminator(self.d_net, self.x, self.conv_hidden_num, reuse=False)
+        d_out_fake, _ = discriminator(self.d_net, self.fake_data, self.conv_hidden_num)
 
-        self.d_loss = tf.reduce_mean(d_out_fake) - tf.reduce_mean(d_out_real)
-        self.g_loss = -tf.reduce_mean(d_out_fake)
-
-        # WGAN lipschitz-penalty
-        epsilon = tf.random_uniform(shape=[self.batch_size, 1, 1], minval=0., maxval=1.)
-
-        data_diff = fake_data_softmax - real_data_one_hot
-        interp_data = real_data_one_hot + epsilon * data_diff
-        disc_interp, _ = discriminator(self.d_net, interp_data, self.conv_hidden_num,
-                                       self.img_len, vocab_size)
-        grad_interp = tf.gradients(disc_interp, [interp_data])[0]
-        print('The shape of grad_interp: {}'.format(grad_interp.get_shape().as_list()))
-
-        self.slope = tf.norm(grad_interp)
-        gradient_penalty = tf.reduce_mean((self.slope - 1.) ** 2)
-        self.d_loss += self.lmd * gradient_penalty
+        self.d_loss, self.g_loss = self.cal_losses(self.x, self.fake_data, d_out_real, d_out_fake, self.loss_type)
+        self.slope_real = tf.reduce_mean(tf.norm(tf.gradients(d_out_real, [self.x])[0], axis=1))
 
         if self.optimizer == 'adam':
             optim = tf.train.AdamOptimizer
@@ -103,50 +83,90 @@ class GAN_GP_Img(object):
         self.summary_op = tf.summary.merge([
             tf.summary.scalar("loss/d_loss", self.d_loss),
             tf.summary.scalar("loss/g_loss", self.g_loss),
-            tf.summary.scalar("grad/norm_gradient", self.slope)
+            tf.summary.scalar("grad/norm_gradient", self.slope_real)
         ])
 
     def train(self):
         z_fixed = np.random.normal(size=[self.batch_size * 10, self.z_dim])  # samples of 10 times batch size
-        gen = inf_train_gen(self.lines, self.batch_size, self.charmap)
 
         for step in trange(self.max_step):
             # Train generator
-            _data = gen.next()
-            summary_str, _ = self.sess.run([self.summary_op, self.g_optim], feed_dict={self.real_data: _data})
+            summary_str, _ = self.sess.run([self.summary_op, self.g_optim])
             self.summary_writer.add_summary(summary_str, global_step=step)
             self.summary_writer.flush()
 
             # Train critic
             for i in range(self.critic_iters):
-                _data = gen.next()
-                self.sess.run(self.d_optim, feed_dict={self.real_data: _data})
+                self.sess.run(self.d_optim)
 
-            if step % self.log_step == self.log_step-1:
-                _data = gen.next()
-                g_loss, d_loss, slope = self.sess.run([self.g_loss, self.d_loss, self.slope],
-                                                      feed_dict={self.real_data: _data})
+            if step % self.log_step == self.log_step - 1:
+                g_loss, d_loss, slope = self.sess.run([self.g_loss, self.d_loss, self.slope_real])
                 print("[{}/{}] Loss_D: {:.6f} Loss_G: {:.6f} Slope: {:.6f}".
                       format(step + 1, self.max_step, d_loss, g_loss, slope))
-                self.generate_samples(z_fixed, idx=step)
+                self.generate_samples(z_fixed, self.model_dir, idx=step)
 
-    def generate_samples(self, z_fixed, idx):
-        samples = []
-        for num in range(10):
-            z_fixed_bs = z_fixed[self.batch_size * num: self.batch_size * (num + 1)]
-            samples = self.sess.run(self.fake_data, feed_dict={self.z: z_fixed_bs})
-            decoded_samples = []
-            for i in range(len(samples)):
-                decoded = []
-                for j in range(len(samples[i])):
-                    decoded.append(self.inv_charmap[samples[i][j]])
-                decoded_samples.append(tuple(decoded))
-            samples.extend(decoded_samples)
+    def generate_samples(self, z_fixed, sample_dir, idx):
+        x = self.sess.run(self.fake_data, {self.z: z_fixed})
+        path = os.path.join(sample_dir, 'sample_G_{}.png'.format(idx))
 
-        with open(os.path.join(self.model_dir, 'samples_{}.txt'.format(idx)), 'w') as f:
-            for s in samples:
-                s = "".join(s)
-                f.write(s + "\n")
+
+    def cal_grad_penalty(self, real_data, fake_data):
+        # WGAN lipschitz-penalty
+        epsilon = tf.random_uniform(shape=[self.batch_size, 1, 1], minval=0., maxval=1.)
+
+        data_diff = fake_data - real_data
+        interp_data = real_data + epsilon * data_diff
+        disc_interp, _ = discriminator(self.d_net, interp_data, self.conv_hidden_num)
+        grad_interp = tf.gradients(disc_interp, [interp_data])[0]
+        print('The shape of grad_interp: {}'.format(grad_interp.get_shape().as_list()))
+
+        slope = tf.norm(grad_interp, axis=1)
+        grad_penalty = tf.reduce_mean((slope - 1.) ** 2)
+        return grad_penalty
+
+    def cal_losses(self, real_data, fake_data, d_out_real, d_out_fake, loss_type):
+        f_div = ['KL', 'RKL', 'JS', 'Hellinger', 'TV', 'Pearson', 'alpha']
+        f_div_gp = ['KL-GP', 'RKL-GP', 'JS-GP', 'Hellinger-GP', 'TV-GP', 'Pearson-GP', 'alpha-GP']
+
+        if loss_type == 'WGAN-GP':
+            d_loss = tf.reduce_mean(d_out_fake) - tf.reduce_mean(d_out_real)
+            g_loss = -tf.reduce_mean(d_out_fake)
+
+            grad_penalty = self.cal_grad_penalty(real_data, fake_data)
+            d_loss += self.lmd * grad_penalty
+
+            return d_loss, g_loss
+
+        elif loss_type in ['GAN', 'GAN-GP']:
+            d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+                d_out_real, tf.zeros_like(d_out_real)
+            ))
+            d_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+                d_out_fake, tf.ones_like(d_out_fake)
+            ))
+            d_loss = d_loss_real + d_loss_fake
+            g_loss = -d_loss_fake
+
+            if loss_type == 'GAN-GP':
+                grad_penalty = self.cal_grad_penalty(real_data, fake_data)
+                d_loss += self.lmd * grad_penalty
+
+            return d_loss, g_loss
+
+        elif loss_type in f_div + f_div_gp:
+            loss_name = loss_type.split('-')[0]
+            d_loss_real = -tf.reduce_mean(g_f(d_out_real, loss_name))
+            d_loss_fake = tf.reduce_mean(f_congugate(g_f(d_out_fake, loss_name)))
+            d_loss = d_loss_real + d_loss_fake
+            g_loss = -d_loss_fake
+
+            if loss_type in f_div_gp:
+                grad_penalty = self.cal_grad_penalty(real_data, fake_data)
+                d_loss += self.lmd * grad_penalty
+
+            return d_loss, g_loss
+
+        return None
 
 
 if __name__ == '__main__':

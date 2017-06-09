@@ -1,3 +1,5 @@
+__author__= 'Weili Nie'
+
 import os
 import tensorflow as tf
 from tqdm import trange
@@ -6,8 +8,6 @@ from lang_helpers import load_dataset
 from config import get_config
 from model_lang import *
 from utils import *
-
-__author__= 'Weili Nie'
 
 
 class WGAN_GP_Char(object):
