@@ -58,18 +58,22 @@ class GAN_GP_Img(object):
         self.x = load_dataset(
             data_path=self.data_path,
             batch_size=self.batch_size,
-            scale_size=self.img_dim
+            scale_size=self.img_dim,
+            split=self.split
         )
+        x = self.x / 127.5 - 1. # Normalize image to [-1,1]
         img_chs = self.x.get_shape().as_list()[-1]
         self.z = tf.random_normal(shape=[self.batch_size, self.z_dim])
 
-        self.fake_data, g_vars = generator(self.g_net, self.z, self.conv_hidden_num, self.img_dim, img_chs)
+        fake_data, g_vars = generator(self.g_net, self.z, self.conv_hidden_num, self.img_dim, img_chs)
 
-        d_out_real, d_vars = discriminator(self.d_net, self.x, self.conv_hidden_num, reuse=False)
-        d_out_fake, _ = discriminator(self.d_net, self.fake_data, self.conv_hidden_num)
+        self.fake_data = tf.clip_by_value((fake_data + 1)*127.5, 0, 255) # Denormalization
 
-        self.d_loss, self.g_loss = self.cal_losses(self.x, self.fake_data, d_out_real, d_out_fake, self.loss_type)
-        self.slope_real = tf.reduce_mean(tf.norm(tf.gradients(d_out_real, [self.x])[0], axis=1))
+        d_out_real, d_vars = discriminator(self.d_net, x, self.conv_hidden_num, reuse=False)
+        d_out_fake, _ = discriminator(self.d_net, fake_data, self.conv_hidden_num)
+
+        self.d_loss, self.g_loss = self.cal_losses(x, fake_data, d_out_real, d_out_fake, self.loss_type)
+        self.slope_real = tf.reduce_mean(tf.norm(tf.gradients(d_out_real, [x])[0], axis=1))
 
         if self.optimizer == 'adam':
             optim_op = tf.train.AdamOptimizer
@@ -88,7 +92,10 @@ class GAN_GP_Img(object):
         ])
 
     def train(self):
-        z_fixed = np.random.normal(size=[self.batch_size * 10, self.z_dim])  # samples of 10 times batch size
+        print('start training...\n [{}] using d_net [{}] and g_net [{}] with loss type [{}]'.format(
+            self.dataset, self.d_net, self.g_net, self.loss_type
+        ))
+        z_fixed = np.random.normal(size=[self.batch_size, self.z_dim])
 
         for step in trange(self.max_step):
             # Train generator
@@ -100,17 +107,25 @@ class GAN_GP_Img(object):
             for i in range(self.critic_iters):
                 self.sess.run(self.d_optim)
 
-            if step % self.log_step == self.log_step - 1:
+            if step % self.log_step == 0:
                 g_loss, d_loss, slope = self.sess.run([self.g_loss, self.d_loss, self.slope_real])
                 print("[{}/{}] Loss_D: {:.6f} Loss_G: {:.6f} Slope: {:.6f}".
-                      format(step + 1, self.max_step, d_loss, g_loss, slope))
+                      format(step, self.max_step, d_loss, g_loss, slope))
+
+            if step % (self.log_step * 2) == 0:
                 self.generate_samples(z_fixed, self.model_dir, idx=step)
 
-    def generate_samples(self, z_fixed, sample_dir, idx):
+    def generate_samples(self, z_fixed, model_dir, idx):
         x = self.sess.run(self.fake_data, {self.z: z_fixed})
+        sample_dir = os.path.join(model_dir, 'samples')
+
+        if not os.path.exists(sample_dir):
+            os.makedirs(sample_dir)
+
         path = os.path.join(sample_dir, 'sample_G_{}.png'.format(idx))
         save_image(x, path)
         print("[*] Samples saved: {}".format(path))
+        # save_image(self.sess.run(self.x), os.path.join(sample_dir, 'sample_x_{}.png'.format(idx)))
 
     def cal_grad_penalty(self, real_data, fake_data):
         # WGAN lipschitz-penalty
@@ -141,13 +156,17 @@ class GAN_GP_Img(object):
 
         elif loss_type in ['GAN', 'GAN-GP']:
             d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-                d_out_real, tf.zeros_like(d_out_real)
+                logits=d_out_real, labels=tf.ones_like(d_out_real)
             ))
             d_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-                d_out_fake, tf.ones_like(d_out_fake)
+                logits=d_out_fake, labels=tf.zeros_like(d_out_fake)
             ))
             d_loss = d_loss_real + d_loss_fake
-            g_loss = -d_loss_fake
+
+            # use -logD trick
+            g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=d_out_fake, labels=tf.ones_like(d_out_fake)
+            ))
 
             if loss_type == 'GAN-GP':
                 grad_penalty = self.cal_grad_penalty(real_data, fake_data)

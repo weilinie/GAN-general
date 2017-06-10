@@ -9,16 +9,15 @@ def load_dataset(data_path, batch_size, scale_size, split=None, is_grayscale=Fal
     if dataset_name in ['CelebA'] and split:
         data_path = os.path.join(data_path, 'splits', split)
     else:
-        is_grayscale = True
+        # is_grayscale = True
         raise Exception('[!] Caution! Unknown dataset name.')
 
     paths = []
+    tf_decode = tf.image.decode_jpeg
     for ext in ["jpg", "png"]:
         paths = glob("{}/*.{}".format(data_path, ext))
 
-        if ext == "jpg":
-            tf_decode = tf.image.decode_jpeg
-        elif ext == 'png':
+        if ext == 'png':
             tf_decode = tf.image.decode_png
 
         if len(paths) != 0:
@@ -52,7 +51,4 @@ def load_dataset(data_path, batch_size, scale_size, split=None, is_grayscale=Fal
     else:
         queue = tf.image.resize_nearest_neighbor(queue, [scale_size, scale_size])
 
-    # Normalize image to [-1,1]
-    queue = tf.to_float(queue)/127.5 - 1.
-
-    return queue
+    return tf.to_float(queue)

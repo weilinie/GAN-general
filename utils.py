@@ -15,10 +15,10 @@ def prepare_dirs(config, dataset):
         if config.load_path.startswith(config.log_dir):
             config.model_dir = config.load_path
         else:
-            if config.load_path.startswith(config.dataset):
+            if config.load_path.startswith(dataset):
                 config.model_name = config.load_path
             else:
-                config.model_name = "{}_{}".format(config.dataset, config.load_path)
+                config.model_name = "{}_{}".format(dataset, config.load_path)
     else:
         config.model_name = "{}_{}".format(dataset, datetime.now().strftime("%m%d_%H%M%S"))
 
@@ -54,12 +54,12 @@ def resBlock(inputs, input_num, output_num, kernel_size, resample=None):
         conv_2 = functools.partial(tcl.conv2d, num_outputs=output_num)
     elif resample == 'up':
         conv_shortcut = subpixelConv2D
-        conv_1 = functools.partial(tcl.conv2d, output_dim=input_num/2)
+        conv_1 = functools.partial(tcl.conv2d, num_outputs=input_num/2)
         conv_1b = functools.partial(tcl.conv2d_transpose, num_outputs=output_num/2, stride=2)
         conv_2 = functools.partial(tcl.conv2d, num_outputs=output_num)
     elif resample == None:
         conv_shortcut = tcl.conv2d
-        conv_1 = functools.partial(tcl.conv2d, output_dim=input_num/2)
+        conv_1 = functools.partial(tcl.conv2d, num_outputs=input_num/2)
         conv_1b = functools.partial(tcl.conv2d, num_outputs=output_num/2)
         conv_2 = functools.partial(tcl.conv2d, num_outputs=output_num)
 
@@ -129,28 +129,28 @@ def g_f(v, option="KL", alpha=0.5):
         raise Exception("Not implemented divergence option")
 
 
-
 def make_grid(tensor, nrow=8, padding=2):
     """Code based on https://github.com/pytorch/vision/blob/master/torchvision/utils.py"""
     batch_size = tensor.shape[0]
     xmaps = min(nrow, batch_size)
     ymaps = batch_size // xmaps
     height, width = int(tensor.shape[1] + padding), int(tensor.shape[2] + padding)
-    grid = np.zeros([height * ymaps + 1 + padding // 2, width * xmaps + 1 + padding // 2, 3], dtype=np.uint8)
+    grid = np.zeros([height * ymaps + padding, width * xmaps + padding, 3], dtype=np.uint8)
     k = 0
     for y in range(ymaps):
         for x in range(xmaps):
             if k >= batch_size:
                 break
-            h, h_width = y * height + 1 + padding // 2, height - padding
-            w, w_width = x * width + 1 + padding // 2, width - padding
+            h, h_width = y * height + padding, height - padding
+            w, w_width = x * width + padding, width - padding
 
             grid[h:h+h_width, w:w+w_width] = tensor[k]
             k += 1
     return grid
 
+
 def save_image(tensor, filename, nrow=8, padding=2):
-    # Bathsize is 8*2
     ndarr = make_grid(tensor, nrow=nrow, padding=padding)
+    # ndarr = ((ndarr + 1) * 127.5).astype(np.uint8)
     im = Image.fromarray(ndarr)
     im.save(filename)

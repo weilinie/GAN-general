@@ -142,6 +142,15 @@ def discriminatorDCGAN(x, hidden_num, reuse, kern_size=5):
 # +++++++++++++++++++++ MLP +++++++++++++++++++++++
 # -------------------------------------------------
 def generatorMLP(z, output_dim, out_channels, hidden_num=512, n_layers=3):
+    '''
+    Default values:
+    :param z: 128
+    :param output_dim: 64
+    :param out_channels: 3
+    :param hidden_num: 512
+    :param n_layers: 3
+    :return:
+    '''
     with tf.variable_scope("G") as vs:
 
         output = tcl.fully_connected(z, hidden_num)
