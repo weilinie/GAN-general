@@ -4,7 +4,7 @@ Tensorflow implementation for training GANs with various objectives and gradient
 
 ## Requirements
 
-- python 3.5
+- Python 3.5
 - Tensorflow 1.1.0
 
 ## Usage
