@@ -15,6 +15,7 @@ net_parser.add_argument('--g_net', type=str, default='DCGAN', choices=['ResNet',
 net_parser.add_argument('--d_net', type=str, default='DCGAN', choices=['ResNet', 'DCGAN', 'MLP'])
 net_parser.add_argument('--conv_hidden_num', type=int, default=64, choices=[16, 64, 128, 256, 512])
 net_parser.add_argument('--batch_size', type=int, default=64)
+net_parser.add_argument('--is_batchnorm', type=bool, default=False)
 net_parser.add_argument('--z_dim', type=int, default=128, choices=[64, 128])
 
 # Data
@@ -42,9 +43,10 @@ train_parser.add_argument('--critic_iters', type=int, default=10, help='for WGAN
 
 # Summary and logs
 summary_parser = add_argument_group('Summary')
-summary_parser.add_argument('--load_path', type=str, default='1', help='path or suffix')
-summary_parser.add_argument('--log_step', type=int, default=10)
-summary_parser.add_argument('--save_step', type=int, default=50)
+summary_parser.add_argument('--load_path', type=str, default='gan_dcgan_none',
+                            help='path or suffix [e.g. gan_dcgan_BN]')
+summary_parser.add_argument('--log_step', type=int, default=20)
+summary_parser.add_argument('--save_step', type=int, default=100)
 summary_parser.add_argument('--log_dir', type=str, default='logs')
 
 
