@@ -151,6 +151,10 @@ def make_grid(tensor, nrow=8, padding=2):
 
 def save_image(tensor, filename, nrow=8, padding=2):
     ndarr = make_grid(tensor, nrow=nrow, padding=padding)
-    # ndarr = ((ndarr + 1) * 127.5).astype(np.uint8)
     im = Image.fromarray(ndarr)
     im.save(filename)
+    print('saved file: {}'.format(os.path.basename(filename)))
+
+
+def leaky_relu(x, alpha=0.2):
+    return tf.maximum(tf.minimum(0.0, alpha * x), x)

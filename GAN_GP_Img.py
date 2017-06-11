@@ -32,27 +32,29 @@ class GAN_GP_Img(object):
 
         self.model_dir = config.model_dir
         self.log_step = config.log_step
+        self.save_step = config.save_step
         self.max_step = config.max_step
 
         self.lmd = config.lmd
-        self.critic_iters = config.critic_iters
+
+        if self.loss_type in ['WGAN', 'WGAN-GP']:
+            self.critic_iters = config.critic_iters
+        else:
+            self.critic_iters = 1
+
+        self.global_step = tf.Variable(0, name='global_step', trainable=False)
 
         self.build_model()
 
-        self.saver = tf.train.Saver()
-        self.summary_writer = tf.summary.FileWriter(self.model_dir)
+        self.sv = tf.train.Supervisor(
+            logdir=self.model_dir,
+            summary_op=None,
+            # summary_writer=self.summary_writer,
+            global_step=self.global_step,
+            save_model_secs=300)
 
-        sv = tf.train.Supervisor(logdir=self.model_dir,
-                                 is_chief=True,
-                                 saver=self.saver,
-                                 summary_op=None,
-                                 summary_writer=self.summary_writer,
-                                 save_model_secs=300,
-                                 ready_for_local_init_op=None)
-
-        gpu_options = tf.GPUOptions(allow_growth=True)
-        sess_config = tf.ConfigProto(allow_soft_placement=True, gpu_options=gpu_options)
-        self.sess = sv.prepare_or_wait_for_session(config=sess_config)
+        # gpu_options = tf.GPUOptions(allow_growth=True)
+        # self.sess_config = tf.ConfigProto(allow_soft_placement=True, gpu_options=gpu_options)
 
     def build_model(self):
         self.x = load_dataset(
@@ -61,7 +63,7 @@ class GAN_GP_Img(object):
             scale_size=self.img_dim,
             split=self.split
         )
-        x = self.x / 127.5 - 1. # Normalize image to [-1,1]
+        x = self.x / 127.5 - 1. # Normalization
         img_chs = self.x.get_shape().as_list()[-1]
         self.z = tf.random_normal(shape=[self.batch_size, self.z_dim])
 
@@ -82,8 +84,12 @@ class GAN_GP_Img(object):
         else:
             raise Exception("[!] Caution! Other optimizers do not apply right now!")
 
-        self.d_optim = optim_op(self.d_lr, self.beta1, self.beta2).minimize(self.d_loss, var_list=d_vars)
-        self.g_optim = optim_op(self.g_lr, self.beta1, self.beta2).minimize(self.g_loss, var_list=g_vars)
+        self.d_optim = optim_op(self.d_lr, self.beta1, self.beta2).minimize(
+            self.d_loss, var_list=d_vars
+        )
+        self.g_optim = optim_op(self.g_lr, self.beta1, self.beta2).minimize(
+            self.g_loss, global_step=self.global_step, var_list=g_vars
+        )
 
         self.summary_op = tf.summary.merge([
             tf.summary.scalar("loss/d_loss", self.d_loss),
@@ -97,26 +103,33 @@ class GAN_GP_Img(object):
         ))
         z_fixed = np.random.normal(size=[self.batch_size, self.z_dim])
 
-        for step in trange(self.max_step):
-            # Train generator
-            summary_str, _ = self.sess.run([self.summary_op, self.g_optim])
-            self.summary_writer.add_summary(summary_str, global_step=step)
-            self.summary_writer.flush()
+        with self.sv.managed_session() as sess:
+            for _ in range(self.max_step):
+                if self.sv.should_stop():
+                    break
 
-            # Train critic
-            for i in range(self.critic_iters):
-                self.sess.run(self.d_optim)
+                step = sess.run(self.global_step)
 
-            if step % self.log_step == 0:
-                g_loss, d_loss, slope = self.sess.run([self.g_loss, self.d_loss, self.slope_real])
-                print("[{}/{}] Loss_D: {:.6f} Loss_G: {:.6f} Slope: {:.6f}".
-                      format(step, self.max_step, d_loss, g_loss, slope))
+                # Train generator
+                sess.run(self.g_optim)
 
-            if step % (self.log_step * 2) == 0:
-                self.generate_samples(z_fixed, self.model_dir, idx=step)
+                # Train critic
+                for _ in range(self.critic_iters):
+                    sess.run(self.d_optim)
 
-    def generate_samples(self, z_fixed, model_dir, idx):
-        x = self.sess.run(self.fake_data, {self.z: z_fixed})
+                if step % self.log_step == 0:
+                    g_loss, d_loss, slope, summary_str = sess.run(
+                        [self.g_loss, self.d_loss, self.slope_real, self.summary_op]
+                    )
+                    self.sv.summary_computed(sess, summary_str)
+                    print("[{}/{}] Loss_D: {:.6f} Loss_G: {:.6f} Slope: {:.6f}".
+                          format(step, self.max_step, d_loss, g_loss, slope))
+
+                if step % self.save_step == 0:
+                    self.generate_samples(sess, z_fixed, self.model_dir, idx=step)
+
+    def generate_samples(self, sess, z_fixed, model_dir, idx):
+        x = sess.run(self.fake_data, {self.z: z_fixed})
         sample_dir = os.path.join(model_dir, 'samples')
 
         if not os.path.exists(sample_dir):
@@ -125,7 +138,7 @@ class GAN_GP_Img(object):
         path = os.path.join(sample_dir, 'sample_G_{}.png'.format(idx))
         save_image(x, path)
         print("[*] Samples saved: {}".format(path))
-        # save_image(self.sess.run(self.x), os.path.join(sample_dir, 'sample_x_{}.png'.format(idx)))
+        # save_image(sess.run(self.x), os.path.join(sample_dir, 'sample_x_{}.png'.format(idx)))
 
     def cal_grad_penalty(self, real_data, fake_data):
         # WGAN lipschitz-penalty
