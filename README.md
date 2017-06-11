@@ -11,7 +11,7 @@ Tensorflow implementation for training GANs with various objectives and gradient
 
 First download [CelebA](http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html) or other datasets with:
 
-    $ python download.py --dataset CelebA --data_dir data
+    $ python download.py --dataset CelebA --data_dir data
     
 To train a model for image generation:
     
