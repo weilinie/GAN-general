@@ -50,7 +50,6 @@ class GAN_GP_Img(object):
         self.sv = tf.train.Supervisor(
             logdir=self.model_dir,
             summary_op=None,
-            # summary_writer=self.summary_writer,
             global_step=self.global_step,
             save_model_secs=300)
 
