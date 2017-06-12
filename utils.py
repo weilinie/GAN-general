@@ -157,3 +157,23 @@ def save_image(tensor, filename, nrow=8, padding=2):
 
 def leaky_relu(x, alpha=0.2):
     return tf.maximum(tf.minimum(0.0, alpha * x), x)
+
+
+def layer_norm(inputs):
+    ndims_inputs = inputs.get_shape().ndims
+
+    mean, var = tf.nn.moments(inputs, range(1, ndims_inputs), keep_dims=True)
+
+    # Assume the 'neurons' axis is the last of norm_axes. This is the case for fully-connected and NHWC conv layers.
+    n_neurons = inputs.get_shape().as_list()[ndims_inputs-1]
+
+    offset = tf.Variable(np.zeros(n_neurons, dtype='float32'), name='offset')
+    scale = tf.Variable(np.ones(n_neurons, dtype='float32'), name='scale')
+
+    # Add broadcasting dims to offset and scale (e.g. NHWC conv data)
+    offset = tf.reshape(offset, [1 for _ in range(ndims_inputs-1)] + [-1])
+    scale = tf.reshape(scale, [1 for _ in range(ndims_inputs-1)] + [-1])
+
+    result = tf.nn.batch_normalization(inputs, mean, var, offset, scale, 1e-5)
+
+    return result

@@ -29,7 +29,8 @@ class GAN_GP_Img(object):
         self.img_dim = config.img_dim
         self.g_lr = config.g_lr
         self.d_lr = config.d_lr
-        self.is_batchnorm = config.is_batchnorm
+        self.normalize_d = config.normalize_d
+        self.normalize_g = config.normalize_g
 
         self.model_dir = config.model_dir
         self.log_step = config.log_step
@@ -69,18 +70,18 @@ class GAN_GP_Img(object):
 
         fake_data, g_vars = generator(
             self.g_net, self.z, self.conv_hidden_num,
-            self.img_dim, img_chs, self.is_batchnorm
+            self.img_dim, img_chs, self.normalize_g
         )
 
         self.fake_data = tf.clip_by_value((fake_data + 1)*127.5, 0, 255) # Denormalization
 
         d_out_real, d_vars = discriminator(
             self.d_net, x, self.conv_hidden_num,
-            self.is_batchnorm, reuse=False
+            self.normalize_d, reuse=False
         )
         d_out_fake, _ = discriminator(
             self.d_net, fake_data, self.conv_hidden_num,
-            self.is_batchnorm
+            self.normalize_d
         )
 
         self.d_loss, self.g_loss = self.cal_losses(x, fake_data, d_out_real, d_out_fake, self.loss_type)
@@ -108,8 +109,8 @@ class GAN_GP_Img(object):
 
     def train(self):
         print('start training...\n [{}] using d_net [{}] and g_net [{}] with loss type [{}]\n'
-              'is_batchnorm: {}'.format(
-            self.dataset, self.d_net, self.g_net, self.loss_type, self.is_batchnorm
+              'normalize_d: {}, normalize_g: {}'.format(
+            self.dataset, self.d_net, self.g_net, self.loss_type, self.normalize_d, self.normalize_g
         ))
         z_fixed = np.random.normal(size=[self.batch_size, self.z_dim])
 
@@ -158,7 +159,7 @@ class GAN_GP_Img(object):
         interp_data = real_data + epsilon * data_diff
         disc_interp, _ = discriminator(
             self.d_net, interp_data, self.conv_hidden_num,
-            self.is_batchnorm
+            self.normalize_d
         )
         grad_interp = tf.gradients(disc_interp, [interp_data])[0]
         print('The shape of grad_interp: {}'.format(grad_interp.get_shape().as_list()))

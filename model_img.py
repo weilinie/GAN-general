@@ -3,28 +3,27 @@ __author__ = 'Weili Nie'
 
 import tensorflow as tf
 import tensorflow.contrib.layers as tcl
-from utils import resBlock
-from utils import leaky_relu
+from utils import resBlock, leaky_relu, layer_norm
 
 
-def generator(net, z, hidden_num, output_dim, out_channels, is_batchnorm=True, is_train=True):
+def generator(net, z, hidden_num, output_dim, out_channels, normalize_g, is_train=True):
     if net == 'ResNet':
         return generatorResNet(z, hidden_num, output_dim, out_channels)
     elif net == 'DCGAN':
-        return generatorDCGAN(z, hidden_num, output_dim, out_channels, is_batchnorm, is_train)
+        return generatorDCGAN(z, hidden_num, output_dim, out_channels, normalize_g, is_train)
     elif net == 'MLP':
-        return generatorMLP(z, output_dim, out_channels, is_batchnorm, is_train)
+        return generatorMLP(z, output_dim, out_channels, normalize_g, is_train)
     else:
         raise Exception('[!] Caution! unknown generator type.')
 
 
-def discriminator(net, x, hidden_num, is_batchnorm=True, is_train=True, reuse=True):
+def discriminator(net, x, hidden_num, normalize_d, is_train=True, reuse=True):
     if net == 'ResNet':
         return discriminatorResNet(x, hidden_num, reuse)
     elif net == 'DCGAN':
-        return discriminatorDCGAN(x, hidden_num, is_batchnorm, is_train, reuse)
+        return discriminatorDCGAN(x, hidden_num, normalize_d, is_train, reuse)
     elif net == 'MLP':
-        return discriminatorMLP(x, is_batchnorm, is_train, reuse)
+        return discriminatorMLP(x, normalize_d, is_train, reuse)
     else:
         raise Exception('[!] Caution! unknown discriminator type.')
 
@@ -99,7 +98,7 @@ def discriminatorResNet(x, hidden_num, reuse, kern_size=3):
 # ---------------------------------------------------
 # +++++++++++++++++++++ DCGAN +++++++++++++++++++++++
 # ---------------------------------------------------
-def generatorDCGAN(z, hidden_num, output_dim, out_channels, is_batchnorm, is_train, kern_size=5):
+def generatorDCGAN(z, hidden_num, output_dim, out_channels, normalize_g, is_train, kern_size=5):
     '''
     Default values:
     :param is_train: True
@@ -112,9 +111,13 @@ def generatorDCGAN(z, hidden_num, output_dim, out_channels, is_batchnorm, is_tra
     :return:
     '''
     with tf.variable_scope("G") as vs:
-        if is_batchnorm:
+
+        if normalize_g == 'BN':
             normalizer_fn = tcl.batch_norm
             normalizer_params = {'scale': True, 'is_training': is_train}
+        elif normalize_g == 'LN':
+            normalizer_fn = layer_norm
+            normalizer_params = None
         else:
             normalizer_fn = None
             normalizer_params = None
@@ -162,14 +165,17 @@ def generatorDCGAN(z, hidden_num, output_dim, out_channels, is_batchnorm, is_tra
     return gen_out, g_vars
 
 
-def discriminatorDCGAN(x, hidden_num, is_batchnorm, is_train, reuse, kern_size=5):
+def discriminatorDCGAN(x, hidden_num, normalize_d, is_train, reuse, kern_size=5):
     with tf.variable_scope("D") as vs:
         if reuse:
             vs.reuse_variables()
 
-        if is_batchnorm:
+        if normalize_d == 'BN':
             normalizer_fn = tcl.batch_norm
             normalizer_params = {'scale': True, 'is_training': is_train}
+        elif normalize_d == 'LN':
+            normalizer_fn = layer_norm
+            normalizer_params = None
         else:
             normalizer_fn = None
             normalizer_params = None
@@ -214,7 +220,7 @@ def discriminatorDCGAN(x, hidden_num, is_batchnorm, is_train, reuse, kern_size=5
 # -------------------------------------------------
 # +++++++++++++++++++++ MLP +++++++++++++++++++++++
 # -------------------------------------------------
-def generatorMLP(z, output_dim, out_channels, is_batchnorm, is_train, hidden_num=512, n_layers=3):
+def generatorMLP(z, output_dim, out_channels, normalize_g, is_train, hidden_num=512, n_layers=3):
     '''
     Default values:
     :param is_train: True
@@ -227,9 +233,13 @@ def generatorMLP(z, output_dim, out_channels, is_batchnorm, is_train, hidden_num
     :return:
     '''
     with tf.variable_scope("G") as vs:
-        if is_batchnorm:
+
+        if normalize_g == 'BN':
             normalizer_fn = tcl.batch_norm
             normalizer_params = {'scale': True, 'is_training': is_train}
+        elif normalize_g == 'LN':
+            normalizer_fn = layer_norm
+            normalizer_params = None
         else:
             normalizer_fn = None
             normalizer_params = None
@@ -252,13 +262,17 @@ def generatorMLP(z, output_dim, out_channels, is_batchnorm, is_train, hidden_num
     return gen_out, g_vars
 
 
-def discriminatorMLP(x, is_batchnorm, is_train, reuse, hidden_num=512, n_layers=3):
+def discriminatorMLP(x, normalize_d, is_train, reuse, hidden_num=512, n_layers=3):
     with tf.variable_scope("D") as vs:
         if reuse:
             vs.reuse_variables()
-        if is_batchnorm:
+
+        if normalize_d == 'BN':
             normalizer_fn = tcl.batch_norm
             normalizer_params = {'scale': True, 'is_training': is_train}
+        elif normalize_d == 'LN':
+            normalizer_fn = layer_norm
+            normalizer_params = None
         else:
             normalizer_fn = None
             normalizer_params = None

@@ -2,9 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/../BEGAN-tensorflow/.idea/BEGAN-tensorflow.iml" filepath="$PROJECT_DIR$/../BEGAN-tensorflow/.idea/BEGAN-tensorflow.iml" />
-      <module fileurl="file://$PROJECT_DIR$/../DCGAN/.idea/DCGAN.iml" filepath="$PROJECT_DIR$/../DCGAN/.idea/DCGAN.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/GANs_Regularizations.iml" filepath="$PROJECT_DIR$/.idea/GANs_Regularizations.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/GAN-general.iml" filepath="$PROJECT_DIR$/.idea/GAN-general.iml" />
       <module fileurl="file://$PROJECT_DIR$/../improved_wgan_training/.idea/improved_wgan_training.iml" filepath="$PROJECT_DIR$/../improved_wgan_training/.idea/improved_wgan_training.iml" />
     </modules>
   </component>

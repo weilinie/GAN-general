@@ -5,7 +5,7 @@
       <paths name="weili_aws">
         <serverdata>
           <mappings>
-            <mapping deploy="GANs_Reg" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/GANs_Reg" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>
