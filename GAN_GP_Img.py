@@ -84,8 +84,12 @@ class GAN_GP_Img(object):
             self.normalize_d
         )
 
-        self.d_loss, self.g_loss = self.cal_losses(x, fake_data, d_out_real, d_out_fake, self.loss_type)
-        self.slope_real = tf.reduce_mean(tf.norm(tf.gradients(d_out_real, [x])[0], axis=1))
+        self.d_loss, self.g_loss, metric = self.cal_losses(
+            x, fake_data, d_out_real, d_out_fake, self.loss_type
+        )
+
+        grad_real = tf.reshape(tf.gradients(d_out_real, [x])[0], [self.batch_size, -1])
+        self.slope_real = tf.reduce_mean(tf.norm(grad_real, axis=1))
 
         if self.optimizer == 'adam':
             optim_op = tf.train.AdamOptimizer
@@ -104,7 +108,8 @@ class GAN_GP_Img(object):
         self.summary_op = tf.summary.merge([
             tf.summary.scalar("loss/d_loss", self.d_loss),
             tf.summary.scalar("loss/g_loss", self.g_loss),
-            tf.summary.scalar("grad/norm_gradient", self.slope_real)
+            tf.summary.scalar("grad/norm_gradient", self.slope_real),
+            tf.summary.scalar("loss/metric", metric)
         ])
 
     def train(self):
@@ -163,25 +168,78 @@ class GAN_GP_Img(object):
         )
         grad_interp = tf.gradients(disc_interp, [interp_data])[0]
         print('The shape of grad_interp: {}'.format(grad_interp.get_shape().as_list()))
+        grad_interp_flat = tf.reshape(grad_interp, [self.batch_size, -1])
+        slope = tf.norm(grad_interp_flat, axis=1)
+        print('The shape of slope: {}'.format(slope.get_shape().as_list()))
 
-        slope = tf.norm(grad_interp, axis=1)
+        grad_penalty = tf.reduce_mean((slope - 1.) ** 2)
+        return grad_penalty
+
+    def cal_one_side_grad_penalty(self, real_data, fake_data):
+        # WGAN lipschitz-penalty
+        epsilon = tf.random_uniform(shape=[self.batch_size, 1, 1], minval=0., maxval=1.)
+
+        data_diff = fake_data - real_data
+        interp_data = real_data + epsilon * data_diff
+        disc_interp, _ = discriminator(
+            self.d_net, interp_data, self.conv_hidden_num,
+            self.normalize_d
+        )
+        grad_interp = tf.gradients(disc_interp, [interp_data])[0]
+        print('The shape of grad_interp: {}'.format(grad_interp.get_shape().as_list()))
+        grad_interp_flat = tf.reshape(grad_interp, [self.batch_size, -1])
+        slope = tf.norm(grad_interp_flat, axis=1)
+        print('The shape of slope: {}'.format(slope.get_shape().as_list()))
+
+        grad_penalty = tf.reduce_mean(tf.nn.relu(slope - 1.) ** 2)
+        return grad_penalty
+
+    def cal_real_nearby_grad_penalty(self, real_data, fake_data):
+        # WGAN lipschitz-penalty
+        epsilon = tf.random_uniform(shape=[self.batch_size, 1, 1], minval=0., maxval=1.)
+
+        data_diff = get_perturbed_batch(real_data) - real_data
+        interp_data = real_data + epsilon * data_diff
+        disc_real_nearby, _ = discriminator(
+            self.d_net, interp_data, self.conv_hidden_num,
+            self.normalize_d
+        )
+        grad_real_nearby = tf.gradients(disc_real_nearby, [interp_data])[0]
+        print('The shape of grad_interp: {}'.format(grad_real_nearby.get_shape().as_list()))
+        grad_real_nearby_flat = tf.reshape(grad_real_nearby, [self.batch_size, -1])
+        slope = tf.norm(grad_real_nearby_flat, axis=1)
+        print('The shape of slope: {}'.format(slope.get_shape().as_list()))
+
         grad_penalty = tf.reduce_mean((slope - 1.) ** 2)
         return grad_penalty
 
     def cal_losses(self, real_data, fake_data, d_out_real, d_out_fake, loss_type):
         f_div = ['KL', 'RKL', 'JS', 'Hellinger', 'TV', 'Pearson', 'alpha']
-        f_div_gp = ['KL-GP', 'RKL-GP', 'JS-GP', 'Hellinger-GP', 'TV-GP', 'Pearson-GP', 'alpha-GP']
+        f_div_gp = [name+'-GP' for name in f_div]
+        f_div_osgp = [name + '-OSGP' for name in f_div]
+        f_div_rngp = [name + '-RNGP' for name in f_div]
+        f_div_all = f_div + f_div_gp + f_div_osgp + f_div_rngp
 
-        if loss_type == 'WGAN-GP':
+        if loss_type in ['WGAN-GP', 'WGAN-OSGP', 'WGAN-RNGP']:
             d_loss = tf.reduce_mean(d_out_fake) - tf.reduce_mean(d_out_real)
             g_loss = -tf.reduce_mean(d_out_fake)
+            metric = -d_loss
 
-            grad_penalty = self.cal_grad_penalty(real_data, fake_data)
-            d_loss += self.lmd * grad_penalty
+            if loss_type == 'WGAN-GP':
+                grad_penalty = self.cal_grad_penalty(real_data, fake_data)
+                d_loss += self.lmd * grad_penalty
 
-            return d_loss, g_loss
+            elif loss_type == 'WGAN-OSGP':
+                grad_penalty = self.cal_one_side_grad_penalty(real_data, fake_data)
+                d_loss += self.lmd * grad_penalty
 
-        elif loss_type in ['GAN', 'GAN-GP']:
+            elif loss_type == 'WGAN-RNGP':
+                grad_penalty = self.cal_real_nearby_grad_penalty(real_data, fake_data)
+                d_loss += self.lmd * grad_penalty
+
+            return d_loss, g_loss, metric
+
+        elif loss_type in ['GAN', 'GAN-GP', 'GAN-OSGP', 'GAN-RNGP']:
             d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
                 logits=d_out_real, labels=tf.ones_like(d_out_real)
             ))
@@ -189,30 +247,47 @@ class GAN_GP_Img(object):
                 logits=d_out_fake, labels=tf.zeros_like(d_out_fake)
             ))
             d_loss = d_loss_real + d_loss_fake
-
             # use -logD trick
             g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
                 logits=d_out_fake, labels=tf.ones_like(d_out_fake)
             ))
+            metric = -d_loss
 
             if loss_type == 'GAN-GP':
                 grad_penalty = self.cal_grad_penalty(real_data, fake_data)
                 d_loss += self.lmd * grad_penalty
 
-            return d_loss, g_loss
+            elif loss_type == 'GAN-OSGP':
+                grad_penalty = self.cal_one_side_grad_penalty(real_data, fake_data)
+                d_loss += self.lmd * grad_penalty
 
-        elif loss_type in f_div + f_div_gp:
+            elif loss_type in 'GAN-RNGP':
+                grad_penalty = self.cal_real_nearby_grad_penalty(real_data, fake_data)
+                d_loss += self.lmd * grad_penalty
+
+            return d_loss, g_loss, metric
+
+        elif loss_type in f_div_all:
             loss_name = loss_type.split('-')[0]
             d_loss_real = -tf.reduce_mean(g_f(d_out_real, loss_name))
             d_loss_fake = tf.reduce_mean(f_congugate(g_f(d_out_fake, loss_name)))
             d_loss = d_loss_real + d_loss_fake
             g_loss = -d_loss_fake
+            metric = -d_loss
 
             if loss_type in f_div_gp:
                 grad_penalty = self.cal_grad_penalty(real_data, fake_data)
                 d_loss += self.lmd * grad_penalty
 
-            return d_loss, g_loss
+            elif loss_type in f_div_osgp:
+                grad_penalty = self.cal_one_side_grad_penalty(real_data, fake_data)
+                d_loss += self.lmd * grad_penalty
+
+            elif loss_type in f_div_rngp:
+                grad_penalty = self.cal_real_nearby_grad_penalty(real_data, fake_data)
+                d_loss += self.lmd * grad_penalty
+
+            return d_loss, g_loss, metric
 
         return None
 

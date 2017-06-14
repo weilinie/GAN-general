@@ -177,3 +177,9 @@ def layer_norm(inputs):
     result = tf.nn.batch_normalization(inputs, mean, var, offset, scale, 1e-5)
 
     return result
+
+
+# Use for computing real_nearby_gradient_penalty
+def get_perturbed_batch(minibatch):
+    _, var = tf.nn.moments(minibatch, axes=[i for i in range(0, minibatch.shape.ndims)])
+    return minibatch + 0.5 * tf.sqrt(var) * np.random.random(minibatch.shape)
