@@ -7,6 +7,12 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.layers as tcl
 from PIL import Image
+import collections
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+_since_beginning = collections.defaultdict(lambda: {})
 
 
 def prepare_dirs(config, dataset):
@@ -183,3 +189,17 @@ def layer_norm(inputs):
 def get_perturbed_batch(minibatch):
     _, var = tf.nn.moments(minibatch, axes=[i for i in range(0, minibatch.shape.ndims)])
     return minibatch + 0.5 * tf.sqrt(var) * np.random.random(minibatch.shape)
+
+
+# Plot inception score
+def plot_incept_score(idx, incept_score, save_step, model_dir):
+    _since_beginning[idx] = incept_score
+    if idx % save_step == 0:
+        x_vals = np.sort(_since_beginning.keys())
+        y_vals = [_since_beginning[x] for x in x_vals]
+
+        plt.clf()
+        plt.plot(x_vals, y_vals)
+        plt.xlabel('iteration')
+        plt.ylabel('inception score')
+        plt.savefig(os.path.join(model_dir, 'inception_score.jpg'))

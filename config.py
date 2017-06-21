@@ -33,7 +33,7 @@ data_parser.add_argument('--split', type=str, default='train', help='for CelebA 
 
 # Training
 train_parser = add_argument_group('Training')
-train_parser.add_argument('--loss_type', type=str, default='WGAN-GP')
+train_parser.add_argument('--loss_type', type=str, default='GAN')
 train_parser.add_argument('--optimizer', type=str, default='adam')
 train_parser.add_argument('--max_step', type=int, default=100000, help='maximum iterations')
 train_parser.add_argument('--d_lr', type=float, default=1e-4)
@@ -46,7 +46,7 @@ train_parser.add_argument('--critic_iters', type=int, default=10, help='for WGAN
 
 # Summary and logs
 summary_parser = add_argument_group('Summary')
-summary_parser.add_argument('--load_path', type=str, default='wgan_gp_mlp_none',
+summary_parser.add_argument('--load_path', type=str, default='gan_mlp_none',
                             help='path or suffix [e.g. gan_dcgan_bn]')
 summary_parser.add_argument('--log_step', type=int, default=20)
 summary_parser.add_argument('--save_step', type=int, default=100)

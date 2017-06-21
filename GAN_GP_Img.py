@@ -8,6 +8,7 @@ from img_helpers import load_dataset
 from config import get_config
 from model_img import *
 from utils import *
+# from inception_score import get_inception_score
 
 
 class GAN_GP_Img(object):
@@ -54,9 +55,6 @@ class GAN_GP_Img(object):
             global_step=self.global_step,
             save_model_secs=300)
 
-        # gpu_options = tf.GPUOptions(allow_growth=True)
-        # self.sess_config = tf.ConfigProto(allow_soft_placement=True, gpu_options=gpu_options)
-
     def build_model(self):
         self.x = load_dataset(
             data_path=self.data_path,
@@ -64,13 +62,15 @@ class GAN_GP_Img(object):
             scale_size=self.img_dim,
             split=self.split
         )
-        x = self.x / 127.5 - 1. # Normalization
         img_chs = self.x.get_shape().as_list()[-1]
+
+        x = self.x / 127.5 - 1. # Normalization
+
         self.z = tf.random_normal(shape=[self.batch_size, self.z_dim])
 
         fake_data, g_vars = generator(
             self.g_net, self.z, self.conv_hidden_num,
-            self.img_dim, img_chs, self.normalize_g
+            self.img_dim, img_chs, self.normalize_g, reuse=False
         )
 
         self.fake_data = tf.clip_by_value((fake_data + 1)*127.5, 0, 255) # Denormalization
@@ -112,6 +112,13 @@ class GAN_GP_Img(object):
             tf.summary.scalar("loss/metric", metric)
         ])
 
+        # For computing inception score
+        # z_incept_score = tf.random_normal(shape=[100, self.z_dim])
+        # self.samples_100, _ = generator(
+        #     self.g_net, z_incept_score, self.conv_hidden_num,
+        #     self.img_dim, img_chs, self.normalize_g
+        # )
+
     def train(self):
         print('start training...\n [{}] using d_net [{}] and g_net [{}] with loss type [{}]\n'
               'normalize_d: {}, normalize_g: {}'.format(
@@ -138,6 +145,11 @@ class GAN_GP_Img(object):
                         [self.g_loss, self.d_loss, self.slope_real, self.summary_op]
                     )
                     self.sv.summary_computed(sess, summary_str)
+
+                    # incept_score = self.get_inception_score(sess, step, self.save_step, self.model_dir)
+                    # print("[{}/{}] Loss_D: {:.6f} Loss_G: {:.6f} Slope: {:.6f} Incept_score: {:.6f}".
+                    #       format(step, self.max_step, d_loss, g_loss, slope, incept_score))
+
                     print("[{}/{}] Loss_D: {:.6f} Loss_G: {:.6f} Slope: {:.6f}".
                           format(step, self.max_step, d_loss, g_loss, slope))
 
@@ -194,7 +206,7 @@ class GAN_GP_Img(object):
         grad_penalty = tf.reduce_mean(tf.nn.relu(slope - 1.) ** 2)
         return grad_penalty
 
-    def cal_real_nearby_grad_penalty(self, real_data, fake_data):
+    def cal_real_nearby_grad_penalty(self, real_data):
         # WGAN lipschitz-penalty
         epsilon = tf.random_uniform(shape=[self.batch_size, 1, 1], minval=0., maxval=1.)
 
@@ -205,7 +217,7 @@ class GAN_GP_Img(object):
             self.normalize_d
         )
         grad_real_nearby = tf.gradients(disc_real_nearby, [interp_data])[0]
-        print('The shape of grad_interp: {}'.format(grad_real_nearby.get_shape().as_list()))
+        print('The shape of grad_real_nearby: {}'.format(grad_real_nearby.get_shape().as_list()))
         grad_real_nearby_flat = tf.reshape(grad_real_nearby, [self.batch_size, -1])
         slope = tf.norm(grad_real_nearby_flat, axis=1)
         print('The shape of slope: {}'.format(slope.get_shape().as_list()))
@@ -234,7 +246,7 @@ class GAN_GP_Img(object):
                 d_loss += self.lmd * grad_penalty
 
             elif loss_type == 'WGAN-RNGP':
-                grad_penalty = self.cal_real_nearby_grad_penalty(real_data, fake_data)
+                grad_penalty = self.cal_real_nearby_grad_penalty(real_data)
                 d_loss += self.lmd * grad_penalty
 
             return d_loss, g_loss, metric
@@ -251,7 +263,7 @@ class GAN_GP_Img(object):
             g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
                 logits=d_out_fake, labels=tf.ones_like(d_out_fake)
             ))
-            metric = -d_loss
+            metric = -d_loss/2 + np.log(2)
 
             if loss_type == 'GAN-GP':
                 grad_penalty = self.cal_grad_penalty(real_data, fake_data)
@@ -262,7 +274,7 @@ class GAN_GP_Img(object):
                 d_loss += self.lmd * grad_penalty
 
             elif loss_type in 'GAN-RNGP':
-                grad_penalty = self.cal_real_nearby_grad_penalty(real_data, fake_data)
+                grad_penalty = self.cal_real_nearby_grad_penalty(real_data)
                 d_loss += self.lmd * grad_penalty
 
             return d_loss, g_loss, metric
@@ -284,12 +296,26 @@ class GAN_GP_Img(object):
                 d_loss += self.lmd * grad_penalty
 
             elif loss_type in f_div_rngp:
-                grad_penalty = self.cal_real_nearby_grad_penalty(real_data, fake_data)
+                grad_penalty = self.cal_real_nearby_grad_penalty(real_data)
                 d_loss += self.lmd * grad_penalty
 
             return d_loss, g_loss, metric
 
         return None
+
+    # For calculating inception score
+    # def get_inception_score(self, sess, idx, save_step, model_dir):
+    #     all_samples = []
+    #     for i in range(10):
+    #         all_samples.append(sess.run(self.samples_100))
+    #     all_samples = np.concatenate(all_samples, axis=0)
+    #     all_samples = ((all_samples + 1.) * 127.5).astype('int32')
+    #     all_samples = all_samples.reshape((-1, 64, 64, 3))
+    #     incept_score = get_inception_score(list(all_samples))
+    #
+    #     plot_incept_score(idx, incept_score[0], save_step, model_dir)
+    #
+    #     return incept_score[0]
 
 
 if __name__ == '__main__':
