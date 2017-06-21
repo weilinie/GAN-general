@@ -112,12 +112,14 @@ class GAN_GP_Img(object):
             tf.summary.scalar("loss/metric", metric)
         ])
 
+        '''
         # For computing inception score
-        # z_incept_score = tf.random_normal(shape=[100, self.z_dim])
-        # self.samples_100, _ = generator(
-        #     self.g_net, z_incept_score, self.conv_hidden_num,
-        #     self.img_dim, img_chs, self.normalize_g
-        # )
+        z_incept_score = tf.random_normal(shape=[100, self.z_dim])
+        self.samples_100, _ = generator(
+            self.g_net, z_incept_score, self.conv_hidden_num,
+            self.img_dim, img_chs, self.normalize_g
+        )
+        '''
 
     def train(self):
         print('start training...\n [{}] using d_net [{}] and g_net [{}] with loss type [{}]\n'
@@ -273,7 +275,7 @@ class GAN_GP_Img(object):
                 grad_penalty = self.cal_one_side_grad_penalty(real_data, fake_data)
                 d_loss += self.lmd * grad_penalty
 
-            elif loss_type in 'GAN-RNGP':
+            elif loss_type == 'GAN-RNGP':
                 grad_penalty = self.cal_real_nearby_grad_penalty(real_data)
                 d_loss += self.lmd * grad_penalty
 
@@ -303,19 +305,21 @@ class GAN_GP_Img(object):
 
         return None
 
+    '''
     # For calculating inception score
-    # def get_inception_score(self, sess, idx, save_step, model_dir):
-    #     all_samples = []
-    #     for i in range(10):
-    #         all_samples.append(sess.run(self.samples_100))
-    #     all_samples = np.concatenate(all_samples, axis=0)
-    #     all_samples = ((all_samples + 1.) * 127.5).astype('int32')
-    #     all_samples = all_samples.reshape((-1, 64, 64, 3))
-    #     incept_score = get_inception_score(list(all_samples))
-    #
-    #     plot_incept_score(idx, incept_score[0], save_step, model_dir)
-    #
-    #     return incept_score[0]
+    def get_inception_score(self, sess, idx, save_step, model_dir):
+        all_samples = []
+        for i in range(10):
+            all_samples.append(sess.run(self.samples_100))
+        all_samples = np.concatenate(all_samples, axis=0)
+        all_samples = ((all_samples + 1.) * 127.5).astype('int32')
+        all_samples = all_samples.reshape((-1, 64, 64, 3))
+        incept_score = get_inception_score(list(all_samples))
+
+        plot_incept_score(idx, incept_score[0], save_step, model_dir)
+
+        return incept_score[0]
+    '''
 
 
 if __name__ == '__main__':
